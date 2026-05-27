@@ -1,0 +1,76 @@
+@import url("https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+    margin: 0;
+    font-family: "IBM Plex Sans", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: #f8fafc;
+    color: #020617;
+}
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: "Work Sans", system-ui, sans-serif;
+    letter-spacing: -0.01em;
+}
+
+.font-mono, code, .mono {
+    font-family: "IBM Plex Mono", monospace;
+}
+
+@layer base {
+    :root {
+        --background: 210 40% 98%;
+        --foreground: 222 47% 4%;
+        --card: 0 0% 100%;
+        --card-foreground: 222 47% 4%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 222 47% 4%;
+        --primary: 222 47% 11%;
+        --primary-foreground: 210 40% 98%;
+        --secondary: 210 40% 96%;
+        --secondary-foreground: 222 47% 11%;
+        --muted: 210 40% 96%;
+        --muted-foreground: 215 16% 47%;
+        --accent: 210 40% 96%;
+        --accent-foreground: 222 47% 11%;
+        --destructive: 0 72% 51%;
+        --destructive-foreground: 210 40% 98%;
+        --border: 214 32% 91%;
+        --input: 214 32% 91%;
+        --ring: 222 47% 11%;
+        --radius: 0.375rem;
+    }
+}
+
+@layer base {
+    * { @apply border-border; }
+    body { @apply bg-background text-foreground; }
+}
+
+@keyframes overdue-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.25); }
+    50% { box-shadow: 0 0 0 4px rgba(220, 38, 38, 0); }
+}
+.overdue-pulse {
+    animation: overdue-pulse 1.8s ease-in-out infinite;
+}
+
+.table-dense th, .table-dense td {
+    padding: 0.5rem 0.75rem !important;
+    font-size: 0.875rem;
+}
+
+.auth-bg {
+    background-image:
+        linear-gradient(135deg, rgba(241,245,249,0.96), rgba(248,250,252,0.96)),
+        url("https://static.prod-images.emergentagent.com/jobs/0e006a0b-50dc-438b-8612-63b51ab87d22/images/ce080d94ed6f04363f7e7fb4c05c57432dfa28da53bd21738733827918020356.png");
+    background-size: cover;
+    background-position: center;
+}
+
+::selection { background: #0f172a; color: #f8fafc; }

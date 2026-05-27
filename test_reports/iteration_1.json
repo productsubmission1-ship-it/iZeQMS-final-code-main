@@ -1,0 +1,38 @@
+{
+  "summary": "Backend integration testing of izQMS FastAPI service. 25/26 pytest tests passing (96%). All core flows verified: JWT login + httpOnly cookies + Bearer auth + logout, RBAC, record CRUD with sequential PREFIX-2026-XXXX numbering, full workflow (REVIEW→APPROVE→CLOSE, REJECT→REOPEN) with e-signature, audit trail (CREATE/UPDATE/WORKFLOW_*/ESIGN_FAILED), dashboard summary + my-tasks, users mgmt (admin-only PATCH), global audit filters, comments. One failure: brute-force lockout does not trigger in this kube deployment (multiple ingress pods → identifier IP varies per request → counts never reach 5).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/login", "issue": "Brute-force lockout fails behind kubernetes ingress. login_attempts identifier is `request.client.host:email`, but client.host is the ingress/proxy pod IP which rotates across multiple ingress pods (observed 10.227.4.194 and 10.227.5.78). Counts split across identifiers, never hitting MAX_FAILED_ATTEMPTS=5. Fix: use email-only as identifier (or compose with hashed real IP from X-Forwarded-For after configuring trusted proxies)."}
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_izqms_backend.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "Fix brute-force lockout identifier to use email (and optionally real client IP from X-Forwarded-For) so it is robust behind a load balancer. Current implementation is effectively bypassable in this deployment."
+  ],
+  "critical_code_review_comments": [
+    "set_auth_cookies uses secure=False — fine for preview HTTP but should be True in production HTTPS. Also samesite=lax is acceptable for first-party SPA on same domain.",
+    "CORS_ORIGINS defaults to '*' combined with allow_credentials=True — browsers reject this combination. Works only because env may be tightened later; recommend explicit origins in production.",
+    "Brute-force identifier construction (ip:email) is unreliable behind ingress (see minor issue). Consider email-only or trusted-proxy aware IP.",
+    "record_action endpoint: REJECT path has no role guard — any authenticated user (e.g., pure initiator) can REJECT a record. Likely should require reviewer/approver/qa_head/admin like REVIEW/APPROVE.",
+    "record_action endpoint: SUBMIT_REVIEW expects status DRAFT, but create_record sets status='OPEN' directly. SUBMIT_REVIEW path is therefore unreachable via current creation flow.",
+    "verify_esignature checks password before validating reason length; ESIGN_FAILED is logged even when reason is bad, but reason check happens after password check (order may be intentional but worth noting).",
+    "update_record blocks edits in CLOSED/APPROVED but not REJECTED — confirm desired behavior (REJECTED records may need edits before REOPEN).",
+    "Dashboard pending_for_me is global, not user-specific despite the name.",
+    "log_audit stores user_roles snapshot which is good for Part 11; ensure password_hash is never logged in old/new values (currently safe but watch future endpoints).",
+    "server.py is ~720 lines; consider splitting auth/records/dashboard/audit into modules for maintainability.",
+    "No rate limiting on /api/records or /api/audit — global listing returns up to 1000 rows; consider pagination tokens for scale."
+  ],
+  "updated_files": ["/app/backend/tests/test_izqms_backend.py"],
+  "success_rate": {"backend": "96% (25/26)", "frontend": "not tested"},
+  "test_credentials": "Loaded from /app/memory/test_credentials.md — admin@izqms.com / Admin@izQMS2026 verified working. All 4 seed users authenticate. bcrypt hash format $2b$12$ confirmed.",
+  "seed_data_creation": "Backend lifespan auto-seeds 4 users and 5 sample records (one per type). Tests created additional TEST_-prefixed records but did not delete them; harmless. Cleaned stray login_attempts entries created by brute-force test.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Pytest suite at /app/backend/tests/test_izqms_backend.py covers 26 cases. Brute-force lockout test asserts identifier-stable lockout — will keep failing until main agent fixes identifier strategy. After fix, the test should pass without modification. Note: ingress proxies multiple replicas with different client.host IPs (10.227.4.194, 10.227.5.78 observed).",
+  "rca of the issue": "Brute-force lockout failing: backend identifier = `request.client.host:email`. Behind k8s ingress, request.client.host is the ingress pod IP which load-balances across multiple pods. Verified by checking db.login_attempts after 6 failed logins — 2 separate entries with count=3 each (instead of one entry with count=5+locked_until). Mitigation: change identifier to just email (or normalize by trusting X-Forwarded-For after configuring FastAPI's TrustedHostMiddleware/ProxyHeadersMiddleware)."
+}

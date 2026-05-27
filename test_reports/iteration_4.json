@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration 4 — User-Role-Matrix refactor verification. New pytest suite /app/backend/tests/test_role_matrix.py = 51 tests (50 passed, 1 SKIP for unreachable admin->PENDING_QA case). Coverage: (a) all 7 new canonical seed accounts authenticate via /api/auth/login; (b) 3 legacy accounts (qa.head/reviewer/initiator) still authenticate and migrate_user_roles_to_canonical correctly rewrites their stored roles to {qa_manager}/{qa_reviewer}/{employee_operator}; (c) GET /api/roles returns canonical_roles[7], permission_matrix, role_hierarchy, my_effective_roles, my_permissions and gates auditor permissions correctly (view_reports + audit_trail_view only); (d) POST /api/records/{id}/action enforces matrix exactly — employee 403 on REVIEW/APPROVE/CLOSE, qa_reviewer 403 on APPROVE/CLOSE but 200 on REVIEW/REJECT, qa_manager 200 on APPROVE/REJECT/CLOSE, auditor 403 on every action, admin 200 on APPROVE; (e) auditor write-blocks confirmed on POST /records, POST /records/draft, PATCH /records/{id} (all 403) with GET /records 200; (f) user-management endpoints (POST /users + reset-password + activate/deactivate/lock/unlock) gate to admin/super_admin — qa_manager/qa_reviewer/employee/auditor all get 403; (g) workflow config (/settings/password-policy + PUT /form-schemas) gate to admin (qa_manager/auditor 403, admin 200); (h) notification fan-out picks canonical qa_reviewer on DRAFT->OPEN via SUBMIT_REVIEW and qa_manager on OPEN->IN_REVIEW. Frontend smoke confirmed AUDITOR sees Read-only badge + Audit Trail + Reports, NO Users/Settings/Form Builder; EMPLOYEE nav hides Users/Settings/Form Builder/Audit Trail correctly. NewUserDialog 7-role list verified via /app/frontend/src/lib/roles.js + NewUserDialog.jsx code inspection (CANONICAL_ROLES + ROLE_LABELS contain all 7 with human-readable labels).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/users (admin)", "issue": "When actor is admin/super_admin, requires_approval=True is overridden and approval_status is forced to ACTIVE (server.py:1157-1175 area). Per matrix the admin path is documented to bypass; flag for clarity in OpenAPI/PRD. Makes it impossible for an admin to create a PENDING_QA user that qa_manager can subsequently approve — this branch can only be reached via legacy code-paths."},
+      {"endpoint": "POST /api/records", "issue": "Records created directly (not via DRAFT + SUBMIT_REVIEW) skip the qa_reviewer notification fan-out, because fan-out lives only in /records/{id}/action. So when an Employee uses POST /records (which auto-sets status=OPEN), no reviewer is pinged. Consider moving the fan-out into create_record for the OPEN initial state as well."},
+      {"endpoint": "Notification fan-out user query", "issue": "/api/records/{id}/action still uses a hard-coded $in including legacy strings ('reviewer','qa_head','approver'). After the migrate_user_roles_to_canonical step at startup this is redundant. Keep until full archive sweep is confirmed, then drop the legacy aliases for cleanliness."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Login", "issues": ["Inputs lack name/type=email attributes — same as iteration 3, still unresolved. Made playwright testing flaky."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_role_matrix.py",
+    "/app/test_reports/pytest/iter4_role_matrix.xml"
+  ],
+  "action_items": [
+    "Update legacy regression suites (/app/backend/tests/test_izqms_backend.py, test_phase_a.py, test_phase_b.py) — they still reference the old SUPER_ADMIN password 'Admin@izQMS2026'. Current canonical seed password is 'Admin@2026'. Repeated failed logins lock the admin account for 15 minutes, breaking the regression run. Replace the credential constants and reseed the lockout state.",
+    "(Optional) Move qa_reviewer notification fan-out into POST /records so directly-created OPEN records also notify reviewers.",
+    "(Optional) Document admin-bypass-of-PENDING_QA explicitly OR remove the override so qa_manager can still approve admin-seeded users."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now 2295 lines — still overdue for module split. Suggest extracting role_matrix.py (lines 30-160) into a small standalone module.",
+    "PERMISSION_MATRIX + ROLE_EXPANSION exist in BOTH /app/backend/server.py and /app/frontend/src/lib/roles.js, with no shared source of truth. A divergence here will silently break authorization. Consider generating roles.js from server.py at build time OR exposing /api/roles as the single source for the frontend.",
+    "expand_roles() correctly maps legacy strings (qa_head/reviewer/initiator/approver) → canonical, so even unmigrated user docs are honored at runtime. Good safety net for partial migrations.",
+    "Auditor is intentionally excluded from create/edit/approve via has_permission(). Verified: every record-action branch calls has_permission(...) and 403s the auditor.",
+    "Notification fan-out in /records/{id}/action still hard-codes legacy role aliases ('reviewer','qa_head','approver') — after the lifespan migration these should no longer exist in DB; safe to remove."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_role_matrix.py (new — 51 tests)"
+  ],
+  "success_rate": {
+    "backend": "100% on role-matrix suite (50/50 executed; 1 skip for the unreachable admin->PENDING_QA case). Legacy regression suites cannot run until main agent updates their admin password constants.",
+    "frontend": "Smoke pass — auditor sees Read-only + Audit Trail + Reports and NO Users/Settings/Form Builder; employee nav hides Users/Settings/Form Builder/Audit Trail. NewUserDialog 7-role rendering verified by inspection of roles.js + NewUserDialog.jsx."
+  },
+  "test_credentials": "Used /app/memory/test_credentials.md (all 7 canonical accounts + 3 legacy).",
+  "seed_data_creation": "Suite creates ~12 TEST_RM_* records (DEVIATION) and ~5 TEST_RM_* users via admin. None cleaned up (no DELETE endpoint). Existing TEST_PhB / TEST_* artefacts from previous iterations still in DB.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Four pytest suites now exist: test_izqms_backend.py + test_phase_a.py + test_phase_b.py (need admin-password update before they will run again — currently Admin@izQMS2026 is wrong, must be Admin@2026) + test_role_matrix.py (50/50). The role matrix is end-to-end verified. Frontend used a two-step login form intermittently — recommend the main agent add name='email' / name='password' attributes on the login inputs to stabilise playwright testing.",
+  "rca of the issue": "No new bugs in this iteration. The role-matrix implementation is sound: (i) lifespan migrate_user_roles_to_canonical correctly rewrites legacy role strings to canonical at startup; (ii) expand_roles() provides a clean hierarchy expansion with auditor isolated; (iii) has_permission() centralises every gate; (iv) /api/roles surfaces the matrix to the frontend. Two pre-existing minors flagged: admin bypass of PENDING_QA (documented as intended in iter_2) and missing fan-out on POST /records (only DRAFT + SUBMIT_REVIEW fans out). The largest action-item is stale regression-suite credentials — these will lock the admin account on every run."
+}

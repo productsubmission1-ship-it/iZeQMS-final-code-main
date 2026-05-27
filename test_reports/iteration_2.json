@@ -1,0 +1,73 @@
+{
+  "summary": "Phase A backend integration testing for izQMS user management + Part 11 compliance. New suite /app/backend/tests/test_phase_a.py = 30 tests (28 pass, 2 fail). Regression suite /app/backend/tests/test_izqms_backend.py = 26/26 pass (brute-force lockout fix from iter_1 verified working via email-only identifier). Combined: 54/56 (96.4%). Both Phase A failures share the same root cause: token revocation via `token_revoked_at` does NOT actually invalidate existing JWTs because `get_current_user` never compares the JWT `iat` claim against the user's `token_revoked_at`. This is a CRITICAL Part 11 security defect — reset-password, deactivate, lock, and POST /sessions/{id}/revoke all silently write token_revoked_at but old tokens remain valid until natural exp. The agent_to_agent_context explicitly claims this works; implementation is missing it.",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "auth dependency get_current_user (server.py:154-176) → impacts POST /api/users/{id}/reset-password, /deactivate, /lock, POST /api/sessions/{id}/revoke",
+        "issue": "Token revocation via `token_revoked_at` is never enforced. JWT `iat` claim is created (server.py:66) and `token_revoked_at` is written by reset-password/deactivate/lock/revoke, but get_current_user does not read user.token_revoked_at nor compare it with payload['iat']. Result: an attacker with a stolen Bearer token continues to access /api/auth/me, /api/records, etc. even AFTER an admin has 'revoked' the session, reset the password, deactivated, or locked the account. This breaks Part 11 traceability/security guarantees promised by the API contract.",
+        "priority": "CRITICAL"
+      }
+    ],
+    "minor": [
+      {
+        "endpoint": "PATCH /api/settings/password-policy",
+        "issue": "PolicyUpdateIn has no `reason` field, but policy_set tries `payload.model_dump().get('reason')` for audit (server.py:1153). Currently audits 'Password policy updated' fallback for every change because reason is silently dropped. Either add reason field or require an e-sig wrapper for Part 11 compliance (policy change is a controlled action)."
+      },
+      {
+        "endpoint": "POST /api/auth/forgot-password",
+        "issue": "Reset token is written to db.password_reset_tokens but there is no GET/POST endpoint to consume the token (no /auth/reset-password?token=). Token is only logged via logger.info, no email integration. Flow is incomplete — user can never actually reset using the token."
+      },
+      {
+        "endpoint": "POST /api/users",
+        "issue": "When user is created with a `password` provided, `must_change_password` is still set to True (server.py:965). If the admin sets a real password they likely don't want to force a change. Consider only setting True when a temp password was auto-generated."
+      },
+      {
+        "endpoint": "GET /api/sessions",
+        "issue": "Returns users whose `last_login` is within session_timeout_minutes, but does not exclude users whose token has been revoked. A revoked user with a recent last_login still appears as 'active session'."
+      },
+      {
+        "endpoint": "POST /api/users/{id}/approve",
+        "issue": "Two-step approval (PENDING_QA → PENDING_ADMIN → ACTIVE) requires distinct roles. Admin role hits the first branch and only transitions PENDING_ADMIN→ACTIVE, so an admin who is also qa_head cannot start the PENDING_QA→PENDING_ADMIN step in one call. Logic ordering should fall through (no test added to avoid blocking; flagged for review)."
+      },
+      {
+        "endpoint": "POST /api/users (create)",
+        "issue": "When the actor is admin and `requires_approval=True`, the code STILL forces approval_status='ACTIVE' (server.py:937 `if payload.requires_approval and 'admin' not in actor_roles`). Documentation should make clear that admins always bypass approval; otherwise tests for admin-driven pending users would fail (this is why TestUserActions.test_reject_user has to log in as qa_head)."
+      }
+    ]
+  },
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_phase_a.py",
+    "/app/backend/tests/test_izqms_backend.py",
+    "/app/test_reports/pytest/phase_a_results.xml",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "CRITICAL — Enforce token revocation in get_current_user. After jwt.decode, fetch user and compare: `revoked_at = user.get('token_revoked_at'); if revoked_at and int(datetime.fromisoformat(revoked_at).timestamp()) > payload['iat']: raise HTTPException(401, 'Session revoked')`. This single change makes reset-password, deactivate, lock, and /sessions/{id}/revoke actually revoke active tokens — currently a silent no-op. Re-run /app/backend/tests/test_phase_a.py — both failing tests (TestResetPasswordFlow.test_reset_returns_temp_and_forces_must_change and TestSessions.test_revoke_session_invalidates_token) should pass.",
+    "Implement /auth/reset-password?token=... endpoint to consume the token saved by /auth/forgot-password (currently dead-letter).",
+    "Add `reason` to PolicyUpdateIn or wrap PATCH /settings/password-policy with e-signature for Part 11.",
+    "Reconsider must_change_password=True when admin passes an explicit password during /api/users create.",
+    "Filter revoked sessions from GET /sessions output.",
+    "Fix approval ordering in _user_action_helper APPROVE branch so admins-who-are-also-qa_head can still progress PENDING_QA→PENDING_ADMIN."
+  ],
+  "critical_code_review_comments": [
+    "SECURITY: get_current_user does not enforce token_revoked_at vs JWT iat — token revocation is silently broken (see CRITICAL above).",
+    "server.py is now 1239 lines, up from 720 last iteration. Split into modules: auth.py, users.py, records.py, notifications.py, settings.py, audit.py.",
+    "create_access_token uses int(now.timestamp()) for iat — good, but PyJWT also sets exp as a datetime; mixing types is fine for PyJWT but explicit int for both improves consistency.",
+    "verify_esignature still checks password BEFORE reason length. ESIGN_FAILED audit fires for wrong password (correct), but a valid password + short reason returns 400 without audit. Consider auditing every e-sig failure with the failure reason.",
+    "Notifications endpoint has no pagination (.limit(50)). Older notifications are unreachable.",
+    "/api/users/{id}/audit query uses entity_type='USER' on first OR branch but no entity_type filter on user_id branch — could leak audit rows where this user was actor on unrelated entities. Acceptable for user history view but document the intent.",
+    "POST /api/sessions/{user_id}/revoke is admin-only; consider letting qa_head also revoke for security incident response (defense-in-depth).",
+    "forgot-password log line writes reset token to stdout/logs in clear (server.py:1133). Acceptable for preview but must be removed or gated behind DEBUG flag in production.",
+    "create_user defaults requires_approval=True, so a non-admin creator (qa_head) creates a PENDING_QA user. That user then cannot login (403). Confirm this is desired (likely yes for Part 11).",
+    "DraftRecordIn extends RecordIn but RecordIn requires `title` and `description` as non-Optional. Passing nothing for those still 422s, so 'auto-save empty draft' is impossible without sending placeholder text. Consider making them Optional on the draft model."
+  ],
+  "updated_files": ["/app/backend/tests/test_phase_a.py"],
+  "success_rate": {"backend": "96.4% (54/56) — Phase A 28/30, regression 26/26", "frontend": "not tested (per request)"},
+  "test_credentials": "Verified from /app/memory/test_credentials.md. All 4 seed users (admin / qa_head / reviewer / initiator) authenticate successfully.",
+  "seed_data_creation": "Tests provision many TEST_* users (~25 across the run) via POST /api/users. None are deleted — they are deactivated/locked by various tests. No DELETE endpoint exists for users in this API, so cleanup is not possible without direct DB access. Recommend adding a soft-delete or admin purge endpoint for hygiene, or letting tests query and skip TEST_* users in other suites.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Two test suites now: (1) /app/backend/tests/test_izqms_backend.py — original 26-test regression (all pass). (2) /app/backend/tests/test_phase_a.py — 30 new Phase A tests. After main agent adds the token_revoked_at vs iat check in get_current_user, simply re-run `pytest /app/backend/tests/test_phase_a.py -v` and the 2 failing tests should turn green with no changes to the test code. The tests sleep 1.5s before re-using the old token to ensure the iso-second timestamp on token_revoked_at is strictly greater than the JWT iat (which is integer seconds). Brute-force lockout test (in regression suite) now passes — iter_1 minor issue is resolved.",
+  "rca of the issue": "RCA — token revocation silently broken: (a) create_access_token writes payload['iat'] = int(now_utc().timestamp()) at server.py:66. (b) reset-password (1081), deactivate (1017), lock (1020), /sessions/{id}/revoke (1174) all `$set token_revoked_at = iso(now_utc())` on the user doc. (c) get_current_user (154-176) decodes JWT and fetches user by id but reads only `active` — it never reads `token_revoked_at` and never compares against payload['iat']. (d) Result: writing token_revoked_at has no runtime effect. Reproduction: login as user, save Bearer token, call POST /api/users/{id}/reset-password (or /deactivate or /lock or /sessions/{id}/revoke), then GET /api/auth/me with the saved token — observed 200 instead of expected 401. Fix: insert in get_current_user after the `user = await db.users.find_one(...)` line:\n```python\nrevoked = user.get('token_revoked_at')\nif revoked:\n    rev_ts = int(datetime.fromisoformat(revoked).timestamp())\n    if rev_ts >= int(payload['iat']):\n        raise HTTPException(status_code=401, detail='Session revoked')\n```\nAlso adjust deactivate branch: the existing `if not user.get('active', True)` already raises 403, but should be 401 'Session revoked' when token_revoked_at was set, to match the contract message tested."
+}

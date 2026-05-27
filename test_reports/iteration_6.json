@@ -1,0 +1,54 @@
+{
+  "summary": "Iteration 6 — verified the 3 deliverables: (1) legacy QMS workflow regression (dynamic Role Matrix consumption), (2) audit-trail CSV/JSON export, (3) Plant/Site-Based Dynamic Module Framework end-to-end (plants, versioned templates, dynamic records, e-signed transitions). Backend: 24/24 pytest pass against PUBLIC_URL — test_module_framework.py 9/9 (existing) + test_iter6_regression.py 7/7 (new — legacy DEVIATION REVIEW→APPROVE→CLOSE as admin AND as qa.manager, RESTRICTED override DENY blocks APPROVE (403) and removal restores 200, audit JSON export, plant PATCH with reason, auto-retire of prior PUBLISHED on next publish, isolated record audit with DYN_TRANSITION_* entries) + test_role_mgmt_extra.py 8/8 (existing, re-run clean). Frontend (admin): nav-plants + nav-module-framework appear in sidebar; /plants lists 3 seeded plants (HQ/PLANT-1/PLANT-2) + extras with code/name/location/GMP zone/timezone/status; New Plant opens [data-testid=plant-dialog]; /module-framework lists 32 templates with DRAFT/PUBLISHED/RETIRED badges; New Template opens [data-testid=template-designer] with workflow/form/pdf/advanced tabs; chevron on a PUBLISHED row navigates to /dynamic-records/{id}; New Record opens a dynamic form modal (Plant dropdown, Title, Description textarea required, Department dropdown, Severity dropdown, Due date, Reason) with workflow stages INITIATION → REVIEW → APPROVAL → CLOSED rendered at top and 'Transition' button next to existing records; Role Matrix has [data-testid=export-audit-csv] button. Employee correctly does NOT see nav-plants/nav-module-framework/nav-roles in sidebar (RBAC hidden in AppLayout).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/module-framework/plants and /templates", "issue": "Returns 200 for non-admin (employee). Mutating ops are correctly 403, but reads are open to all authenticated users. Sidebar correctly hides these nav links, but direct URL access to /plants and /module-framework pages still renders data (rows visible to employee in browser). If template/plant metadata is intentionally readable by record creators this is fine; otherwise add admin gate on the GET endpoints."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/plants and /module-framework", "issues": ["No client-side route guard — non-admin users can directly visit URLs and view the read-only lists (sidebar correctly hides links). Either gate the routes in App.js using the same permission check used in AppLayout, or make GET endpoints admin-only."]},
+      {"screen": "TemplateDesigner workflow tab", "issues": ["Default stage labels (INITIATION/CLOSED) not detected as plain text in DOM scrape — they likely render inside form inputs; not a bug but worth noting if tests later try to scan via textContent."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_module_framework.py",
+    "/app/backend/tests/test_iter6_regression.py",
+    "/app/backend/tests/test_role_mgmt_extra.py",
+    "/app/test_reports/pytest/iter6_module_framework.xml",
+    "/app/test_reports/pytest/iter6_regression.xml",
+    "/app/test_reports/pytest/iter6_all.xml"
+  ],
+  "action_items": [
+    "(Optional) Gate GET /api/module-framework/plants and /templates with require_role(ADMIN/SUPER_ADMIN) — or add client-side route protection on /plants and /module-framework — to keep the framework admin-only as documented.",
+    "(Optional, carry-over) Login email field still lacks type='email'/name='email' attributes (autofill + selector hygiene)."
+  ],
+  "critical_code_review_comments": [
+    "has_record_action correctly honours dynamic Role Matrix overrides: DENY override on qa_manager.deviation.approve produced HTTP 403; removing override produced 200 on next attempt — verified end-to-end. ✓",
+    "Legacy DEVIATION lifecycle (REVIEW → APPROVE → CLOSE) untouched: 200 for both admin and qa.manager. No regression. ✓",
+    "Module Framework versioning auto-increments per (code, plant_id) and publishing v2 correctly RETIRES v1 with same code+plant. ✓",
+    "Dynamic records bind to template_version at creation time (immutability verified — record.template_version equals tpl.version). ✓",
+    "Workflow transition validation rejects illegal jumps (400) and enforces e-signature (wrong password returns 400/401/403). ✓",
+    "DYN_TRANSITION_<key> audit entries are written and isolated per record. ✓",
+    "RBAC mutating endpoints correctly require admin/super_admin (employee POST /templates → 403). ✓",
+    "Concern: GET endpoints in /module-framework are open to all authenticated users (see backend minor). Recommend tightening to match the 'admin-only feature' design intent.",
+    "Carry-over: server.py is now ~2432 lines + module_framework.py (645 lines) — consider splitting auth/permissions/records into smaller modules as the codebase keeps growing.",
+    "Pre-existing PERMISSION_MATRIX in server.py still parallel to dynamic Role Matrix — eventual deprecation recommended (already flagged in iter 5)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter6_regression.py (new, 7 regression tests for iter 6)"
+  ],
+  "success_rate": {
+    "backend": "100% (24/24): test_module_framework.py 9/9 + test_iter6_regression.py 7/7 + test_role_mgmt_extra.py 8/8",
+    "frontend": "100% on iter 6 surface — nav entries, plant CRUD UI, designer tabs, dynamic-records dialog, export-audit-csv button all verified for admin; RBAC sidebar hiding verified for employee"
+  },
+  "test_credentials": "admin@izqms.com/Admin@2026, qa.manager@izqms.com/QaManager@2026, employee@izqms.com/Employee@2026 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Test suite creates ~10 TEST_ templates (life_*, src_*, copy_*, rec_*, aud_*, auto_*) and ~3 TEST_ plants (P-*) per run. Records are created against test templates only; legacy collection (records) gets ~5 TEST_dev_* deviations per run. Recommend periodic cleanup of TEST_-prefixed module_templates / plants / dynamic_records collections.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All iter 6 features verified. Backend test suites that pass cleanly against PUBLIC_URL: test_module_framework.py, test_iter6_regression.py, test_role_mgmt.py, test_role_mgmt_extra.py, test_role_matrix.py (46/50 — 4 pre-existing failures on legacy seed users, unrelated). DO NOT run test_phase_a.py / test_phase_b.py / test_izqms_backend.py — they reference users that were never seeded and contain stale admin passwords that lock the admin account for 15min. For frontend re-runs, use admin@izqms.com to access /plants, /module-framework, /dynamic-records/{template_id}, /roles. data-testids in place: nav-plants, nav-module-framework, plant-dialog, template-designer, export-audit-csv, publish-template-*, login-email/password/submit.",
+  "rca of the issue": "No product bugs found. Only one borderline design observation: GET /api/module-framework/plants and /templates are not admin-gated, allowing employees to read template/plant metadata via direct URL (sidebar links are correctly hidden). If admin-only is the documented intent, add require_role(ADMIN/SUPER_ADMIN) on the GET endpoints in module_framework.py register_module_framework_routes(); otherwise leave as-is and treat as read-only catalog."
+}

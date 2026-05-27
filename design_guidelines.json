@@ -1,0 +1,120 @@
+{
+  "project_name": "izQMS",
+  "domain": "Enterprise Pharmaceutical eQMS",
+  "theme": "light",
+  "archetype": "Archetype 4: Swiss & High-Contrast",
+  "design_philosophy": "Objective, rigid, and functional. An enterprise command center optimized for USFDA 21 CFR Part 11 and EU Annex 11 compliance. Visuals must convey absolute authority, data integrity, and truth. Emphasize optical clarity, dense data correlation, and sterile high-contrast boundaries. No decorative gradients; focus entirely on progressive disclosure, role-based views, and compliance-aware UI.",
+  "typography": {
+    "headings": {
+      "font_family": "Work Sans",
+      "import_url": "https://fonts.googleapis.com/css2?family=Work+Sans:wght@400;500;600;700&display=swap",
+      "weights": [500, 600, 700],
+      "tracking": "tracking-tight",
+      "color": "text-slate-950"
+    },
+    "body": {
+      "font_family": "IBM Plex Sans",
+      "import_url": "https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600&display=swap",
+      "weights": [400, 500],
+      "color": "text-slate-800"
+    },
+    "data_and_audit": {
+      "font_family": "IBM Plex Mono",
+      "import_url": "https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap",
+      "usage": "Use for all audit trails, timestamps, ALCOA++ logs, unique record IDs (e.g., DEV-2026-001), and electronic signatures.",
+      "color": "text-slate-600"
+    }
+  },
+  "colors": {
+    "background": {
+      "default": "#F8FAFC",
+      "surface": "#FFFFFF",
+      "auth_screen": "#F1F5F9"
+    },
+    "neutral": {
+      "border": "#E2E8F0",
+      "divider": "#CBD5E1",
+      "text_primary": "#020617",
+      "text_secondary": "#475569",
+      "text_tertiary": "#94A3B8"
+    },
+    "primary": {
+      "base": "#0F172A",
+      "hover": "#1E293B",
+      "active": "#334155",
+      "foreground": "#F8FAFC"
+    },
+    "status": {
+      "approved_closed": {
+        "bg": "#ECFDF5",
+        "text": "#059669",
+        "border": "#A7F3D0"
+      },
+      "open_pending": {
+        "bg": "#FFFBEB",
+        "text": "#D97706",
+        "border": "#FDE68A"
+      },
+      "in_review": {
+        "bg": "#EFF6FF",
+        "text": "#2563EB",
+        "border": "#BFDBFE"
+      },
+      "rejected_overdue": {
+        "bg": "#FEF2F2",
+        "text": "#DC2626",
+        "border": "#FECACA"
+      }
+    }
+  },
+  "layout": {
+    "spacing_scale": "Tailwind standard scale, utilizing generous p-6 or p-8 for main content containers to prevent collision with strict grid borders.",
+    "grid_strategy": "The 'Control Room' Grid (Mode B): Very dense, tight gaps (gap-4 or gap-6). High priority on data density and scanability.",
+    "alignment": "Strictly left-aligned for data tables, lists, and forms. Center alignment is only used for high-level KPIs or empty states.",
+    "navigation": "Fixed sidebar navigation for role-based modules (Change Control, Deviation, CAPA, Incident, Event) + Top sticky header for global search, user profile, and persistent notification center."
+  },
+  "surfaces": {
+    "cards": "Grid Borders ('The Technical Look'): border-collapse style. 1px solid border-slate-200. No shadows. Sharp or slightly rounded corners (max rounded-md). Surfaces must feel grounded and physical, not floating.",
+    "modals_dialogs": "Used heavily for E-Signature and Approval Workflows. Solid background (no glassmorphism) to prevent clinical refraction. Strong drop-shadows (shadow-2xl) only on modals to lift them off the base layer.",
+    "tables": "Dense rows. Sticky headers. Use IBM Plex Mono for IDs and dates. Must support advanced search, filtering, and pagination natively."
+  },
+  "motion": {
+    "strategy": "Minimalist and precise. Micro-interactions for feedback only.",
+    "hover_states": "Crisp transitions (transition-colors duration-150 ease-in-out). Buttons elevate text contrast, borders darken.",
+    "loading": "Use skeleton loaders for data tables to avoid layout shifts. No playful animations."
+  },
+  "icons": {
+    "library": "@phosphor-icons/react",
+    "style": "Duotone or bold weight depending on context. Represents accuracy and professional scrutiny."
+  },
+  "components": {
+    "forms": "Use Shadcn customized for high density. Inputs must have clear focus states (ring-2 ring-slate-900). Required fields must be clearly marked. Validation messages in status.rejected color.",
+    "badges": "Use customized Shadcn badges with the status color system. Overdue items pulse gently or have a heavier border.",
+    "tabs": "Used to separate 'Record Details', 'Workflow Timeline', and 'Audit Trail'. Clear active state with bottom border (border-b-2 border-slate-900).",
+    "audit_trail_viewer": "A dedicated log-like component. Fixed height with inner scroll. Mono-spaced font. Each entry shows: Timestamp (UTC), User, Role, Action, Old Value, New Value."
+  },
+  "media": {
+    "image_urls": {
+      "login_background": {
+        "url": "https://static.prod-images.emergentagent.com/jobs/0e006a0b-50dc-438b-8612-63b51ab87d22/images/ce080d94ed6f04363f7e7fb4c05c57432dfa28da53bd21738733827918020356.png",
+        "description": "Abstract, sterile, modern architectural background in pure white and light gray tones. Geometric lines. Use for the login screen background."
+      },
+      "login_illustration": {
+        "url": "https://static.prod-images.emergentagent.com/jobs/0e006a0b-50dc-438b-8612-63b51ab87d22/images/05dcc1e3de766a8b07205547e05b1b4cbf3d279b07a13e780eb302fee15f9878.png",
+        "description": "3D abstract composition of interconnected glass and steel geometric nodes. Use as an accent graphic on auth pages."
+      },
+      "contextual_lab_image": {
+        "url": "https://images.pexels.com/photos/11703173/pexels-photo-11703173.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+        "description": "Modern science lab. Can be used selectively in marketing or onboarding modals."
+      }
+    }
+  },
+  "instructions_to_main_agent": [
+    "CRITICAL: Adhere strictly to 21 CFR Part 11 paradigms. Every action needs an audit trail; every approval needs an E-Signature dialog.",
+    "CRITICAL: All interactive elements MUST include a 'data-testid' attribute (e.g., data-testid='login-submit').",
+    "CRITICAL: Do not use generic 'blue' for primary buttons. Use the slate/black primary defined in the colors object to maintain the 'Authority' archetype.",
+    "CRITICAL: Ensure tables and lists are dense. Use Shadcn components but override default padding to make them tighter.",
+    "CRITICAL: Ensure progressive disclosure on dashboards: KPIs first, followed by overdue tasks, then standard lists.",
+    "CRITICAL: Use IBM Plex Mono for all system IDs, timestamps, and ALCOA++ related logs."
+  ]
+}
