@@ -19,6 +19,13 @@ function emptyMatrix(modules) {
   return out;
 }
 
+function formatActionLabel(key) {
+  return key
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 export default function RoleEditorDialog({ open, onOpenChange, role, modules, onSaved, canManage }) {
   const isEdit = !!role?.id;
   const [form, setForm] = useState(null);
@@ -79,17 +86,25 @@ export default function RoleEditorDialog({ open, onOpenChange, role, modules, on
   };
   const setAllForModule = (mk, val) => {
     const acts = modules[mk]?.actions || [];
+    const legacyKeys = Object.keys(form.permissions?.[mk] || {}).filter((key) => !acts.some((a) => a.key === key));
     const newM = {};
     for (const a of acts) newM[a.key] = val;
+    for (const key of legacyKeys) newM[key] = val;
     setForm((p) => ({ ...p, permissions: { ...p.permissions, [mk]: newM } }));
   };
-  const moduleAllChecked = (mk) => {
+  const moduleActionKeys = (mk) => {
     const acts = modules[mk]?.actions || [];
-    return acts.length > 0 && acts.every((a) => !!form.permissions?.[mk]?.[a.key]);
+    const knownKeys = acts.map((a) => a.key);
+    const legacyKeys = Object.keys(form.permissions?.[mk] || {}).filter((key) => !knownKeys.includes(key));
+    return [...knownKeys, ...legacyKeys];
+  };
+  const moduleAllChecked = (mk) => {
+    const keys = moduleActionKeys(mk);
+    return keys.length > 0 && keys.every((key) => !!form.permissions?.[mk]?.[key]);
   };
   const moduleSomeChecked = (mk) => {
-    const acts = modules[mk]?.actions || [];
-    return acts.some((a) => !!form.permissions?.[mk]?.[a.key]);
+    const keys = moduleActionKeys(mk);
+    return keys.some((key) => !!form.permissions?.[mk]?.[key]);
   };
   const toggleModuleAccess = (mk, val) => {
     let arr = new Set(form.module_access || []);
@@ -296,7 +311,7 @@ export default function RoleEditorDialog({ open, onOpenChange, role, modules, on
                             </div>
                             <div className="flex items-center gap-3">
                               <span className="text-[11px] mono text-slate-500">
-                                {Object.values(form.permissions[m.key] || {}).filter(Boolean).length}/{(m.actions || []).length} granted
+                                {Object.values(form.permissions[m.key] || {}).filter(Boolean).length}/{moduleActionKeys(m.key).length} granted
                               </span>
                               <button
                                 onClick={() => setAllForModule(m.key, !all)}
@@ -330,6 +345,24 @@ export default function RoleEditorDialog({ open, onOpenChange, role, modules, on
                                 </label>
                               );
                             })}
+                            {Object.entries(form.permissions?.[m.key] || {}).filter(([key]) => !(m.actions || []).some((a) => a.key === key)).map(([key, val]) => (
+                              <label
+                                key={key}
+                                className={`flex items-center justify-between gap-2 border rounded-sm px-2 py-1.5 ${
+                                  val ? "border-amber-300 bg-amber-50" : "border-slate-200 bg-white"
+                                } ${!moduleEnabled ? "opacity-40 pointer-events-none" : ""}`}
+                              >
+                                <div>
+                                  <div className="text-xs text-slate-800">{formatActionLabel(key)}</div>
+                                  <div className="text-[9px] mono text-slate-400">{key}</div>
+                                </div>
+                                <Switch
+                                  checked={!!val}
+                                  onCheckedChange={(v) => setPerm(m.key, key, v)}
+                                  data-testid={`perm-${m.key}-${key}`}
+                                />
+                              </label>
+                            ))}
                           </div>
                         </div>
                       );

@@ -135,6 +135,45 @@ def test_update_role(admin_headers):
     assert any(a["action"] == "ROLE_UPDATE" for a in audit)
 
 
+def test_update_role_preserves_legacy_permission_detail(admin_headers):
+    code = f"legacy_detail_{uuid.uuid4().hex[:6]}"
+    body = {
+        "code": code,
+        "name": "Legacy Detail Role",
+        "description": "Regression coverage for legacy permission preservation",
+        "department_access": ["Quality Assurance"],
+        "module_access": ["capa"],
+        "workflow_access": False,
+        "approval_access": False,
+        "review_access": False,
+        "electronic_signature_access": False,
+        "report_access": False,
+        "audit_trail_access": False,
+        "permissions": {
+            "capa": {
+                "approve": True,
+                "legacy_detail": True,
+            },
+        },
+        "reason": "Seed legacy detail",
+    }
+    r = requests.post(f"{API}/role-mgmt/roles", headers=admin_headers, json=body, timeout=10)
+    assert r.status_code == 200, r.text
+    role = r.json()
+    assert role["permissions"]["capa"]["legacy_detail"] is True
+
+    patch_body = {
+        "name": "Legacy Detail Role Updated",
+        "permissions": role["permissions"],
+        "reason": "Preserve legacy detail on update",
+    }
+    r = requests.patch(f"{API}/role-mgmt/roles/{role['id']}", headers=admin_headers, json=patch_body, timeout=10)
+    assert r.status_code == 200, r.text
+    updated = r.json()
+    assert updated["permissions"]["capa"]["legacy_detail"] is True
+    assert updated["permissions"]["capa"]["approve"] is True
+
+
 def test_copy_role(admin_headers):
     rows = requests.get(f"{API}/role-mgmt/roles", headers=admin_headers, timeout=10).json()
     src = next(r for r in rows if r["code"] == "qa_reviewer")

@@ -466,18 +466,22 @@ def _now() -> datetime:
 
 
 def _sanitize_permissions(p: Dict[str, Dict[str, bool]]) -> Dict[str, Dict[str, bool]]:
-    """Filter to known module/action combos so the DB never holds junk keys."""
+    """Preserve stored permission detail, even for legacy or removed module/action keys.
+
+    We keep the canonical matrix shape for known keys while retaining any unknown
+    module/action pairs already present on the role so updates do not silently wipe
+    historical permission detail.
+    """
     out = _empty_permissions(False)
     if not isinstance(p, dict):
         return out
     for mk, acts in p.items():
-        if mk not in out:
-            continue
         if not isinstance(acts, dict):
             continue
+        if mk not in out:
+            out[mk] = {}
         for ak, val in acts.items():
-            if ak in out[mk]:
-                out[mk][ak] = bool(val)
+            out[mk][ak] = bool(val)
     return out
 
 
@@ -619,16 +623,18 @@ async def get_effective_permissions(db, user: dict) -> Dict[str, Any]:
         q["active"] = True
         role_docs = await db.roles.find(q, {"_id": 0}).to_list(50)
 
-    # Union of role permissions
-    role_perms = _empty_permissions(False)
+    # Union of role permissions, preserving legacy keys while still honoring the
+    # canonical matrix for known module/action entries.
+    role_perms = {}
     for rd in role_docs:
         rp = rd.get("permissions") or {}
         for mk, acts in rp.items():
-            if mk not in role_perms:
+            if not isinstance(acts, dict):
                 continue
+            module_perms = role_perms.setdefault(mk, {})
             for ak, val in acts.items():
-                if ak in role_perms[mk] and val:
-                    role_perms[mk][ak] = True
+                if bool(val):
+                    module_perms[ak] = True
 
     # Overrides
     overrides = await db.user_permission_overrides.find({"user_id": user["id"]}, {"_id": 0}).to_list(500)
@@ -657,6 +663,8 @@ async def get_effective_permissions(db, user: dict) -> Dict[str, Any]:
     # Effective
     effective = _empty_permissions(False)
     for mk, acts in role_perms.items():
+        if mk not in effective:
+            effective[mk] = {}
         for ak, val in acts.items():
             key = f"{mk}.{ak}"
             if val or key in active_allow:
